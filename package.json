@@ -1,0 +1,42 @@
+{
+  "name": "split-room",
+  "version": "1.0.0",
+  "description": "No-login expense splitting app for friends, trips and flatmates — made for Indian users",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.9.0",
+    "@supabase/supabase-js": "^2.117.3",
+    "@tailwindcss/postcss": "^4.3.3",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.4.0",
+    "lucide-react": "^1.54.0",
+    "next": "^16.4.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "shadcn": "^4.21.4",
+    "three": "^0.180.0",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.6.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.0",
+    "jest": "^30.5.2",
+    "postcss": "^8.5.29",
+    "tailwindcss": "^4.3.3",
+    "ts-jest": "^29.4.14",
+    "typescript": "^6.0.3"
+  }
+}
