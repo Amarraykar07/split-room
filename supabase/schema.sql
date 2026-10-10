@@ -45,6 +45,7 @@ create table if not exists expenses (
   amount      numeric(12, 2) not null check (amount > 0),
   paid_by     uuid not null references members (id) on delete restrict,
   split_type  text not null default 'equal',
+  category    text not null default 'other',
   created_at  timestamptz not null default now()
 );
 

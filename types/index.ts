@@ -23,6 +23,7 @@ export interface Expense {
   paid_by: string; // member id
   created_at: string;
   split_type: SplitType;
+  category: ExpenseCategory;
   // joined
   paid_by_member?: Member;
   splits?: ExpenseSplit[];
@@ -51,6 +52,7 @@ export interface Settlement {
 }
 
 export type SplitType = 'equal' | 'exact' | 'percentage' | 'shares';
+export type ExpenseCategory = 'food' | 'stay' | 'travel' | 'fun' | 'other';
 
 export interface SettlementRecord {
   id: string;

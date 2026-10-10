@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Member } from '@/types';
+import type { ExpenseCategory, Member } from '@/types';
 import type { FullExpense } from './RoomClient';
 import { supabase } from '@/lib/supabase';
 import { formatINR } from '@/lib/utils';
@@ -25,9 +25,12 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
   const [splitBetween, setSplitBetween] = useState<string[]>(members.map((m) => m.id));
   const [splitType, setSplitType] = useState<SplitType>('equal');
   const [splitValues, setSplitValues] = useState<Record<string, string>>({});
+  const [category, setCategory] = useState<ExpenseCategory>('other');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState<ExpenseCategory>('other');
 
   // Update paidBy default when myMemberId changes
   const effectivePaidBy = paidBy || myMemberId || (members[0]?.id ?? '');
@@ -37,6 +40,7 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
     setPaidBy(myMemberId ?? members[0]?.id ?? '');
     setSplitType('equal');
     setSplitValues({});
+    setCategory('other');
     setShowForm(true);
   };
 
@@ -79,6 +83,7 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
           amount: totalPaise / 100,
           paid_by: effectivePaidBy,
           split_type: splitType,
+          category,
         })
         .select()
         .single();
@@ -111,6 +116,19 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
     setDeletingId(id);
     await supabase.from('expenses').delete().eq('id', id);
     setDeletingId(null);
+  };
+
+  const openEdit = (expense: FullExpense) => {
+    setEditingId(expense.id);
+    setEditCategory(expense.category ?? 'other');
+  };
+
+  const handleEditCategory = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingId) return;
+    const { error: updateError } = await supabase.from('expenses').update({ category: editCategory }).eq('id', editingId);
+    if (updateError) setError(updateError.message);
+    else setEditingId(null);
   };
 
   const totalAmount = expenses.reduce((s, e) => s + Number(e.amount), 0);
@@ -210,6 +228,30 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
             </div>
 
             <div>
+              <label className="label">Category</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['food', '🍽️ Khana'],
+                  ['stay', '🏨 Stay'],
+                  ['travel', '🚕 Travel'],
+                  ['fun', '🎉 Masti'],
+                  ['other', '🛒 Other'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setCategory(value)}
+                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${
+                      category === value ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface text-muted-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
               <label className="label">Split between</label>
               <div className="flex flex-wrap gap-2">
                 {members.map((m) => (
@@ -287,6 +329,19 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
       )}
 
       {/* Expenses list */}
+      {editingId && (
+        <div className="card mb-4">
+          <form onSubmit={handleEditCategory} className="space-y-4">
+            <h3 className="font-bold">Edit expense category</h3>
+            <CategoryPicker value={editCategory} onChange={setEditCategory} />
+            <div className="flex gap-3">
+              <button type="submit" className="btn-primary flex-1">Save</button>
+              <button type="button" className="btn-secondary flex-1" onClick={() => setEditingId(null)}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {expenses.length === 0 && !showForm && (
         <div className="card text-center py-10">
           <FileText className="mx-auto mb-3 text-accent" size={32} />
@@ -311,6 +366,7 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
                 <span className="mt-2 inline-flex rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[11px] font-bold uppercase text-accent">
                   {exp.split_type === 'percentage' ? '%' : exp.split_type}
                 </span>
+                <span className="ml-1 text-sm" title="Expense category">{categoryEmoji(exp.category)}</span>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {exp.splits?.map((s) => (
                     <span
@@ -327,6 +383,13 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
                   {formatINR(Number(exp.amount))}
                 </p>
                 <button
+                  onClick={() => openEdit(exp)}
+                  className="btn-secondary mt-1 mr-1 w-auto px-2 text-xs"
+                  title="Edit expense category"
+                >
+                  Edit
+                </button>
+                <button
                   onClick={() => handleDelete(exp.id)}
                   disabled={deletingId === exp.id}
                   className="btn-danger mt-1 px-2 text-xs"
@@ -341,4 +404,20 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
       </div>
     </section>
   );
+}
+
+function categoryEmoji(category: ExpenseCategory | null | undefined): string {
+  return ({ food: '🍽️', stay: '🏨', travel: '🚕', fun: '🎉', other: '🛒' }[category ?? 'other']);
+}
+
+function CategoryPicker({ value, onChange }: { value: ExpenseCategory; onChange: (value: ExpenseCategory) => void }) {
+  return <div className="flex flex-wrap gap-2">
+    {([
+      ['food', '🍽️ Khana'], ['stay', '🏨 Stay'], ['travel', '🚕 Travel'], ['fun', '🎉 Masti'], ['other', '🛒 Other'],
+    ] as const).map(([category, label]) => (
+      <button key={category} type="button" onClick={() => onChange(category)} className={`min-h-[44px] rounded-xl border px-3 text-sm font-semibold ${value === category ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface text-muted-foreground'}`}>
+        {label}
+      </button>
+    ))}
+  </div>;
 }
