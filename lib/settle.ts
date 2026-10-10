@@ -27,13 +27,23 @@ export function computeBalances(
   expenses: Array<{
     paid_by: string;
     splits: Array<{ member_id: string; share: number }>;
-  }>
+  }>,
+  confirmedSettlements: Array<{ from_member: string; to_member: string; amount: number }> = []
 ): MemberBalance[] {
   const balanceMap: Record<string, number> = {};
 
   // Initialize all members with 0 balance
   for (const m of members) {
     balanceMap[m.id] = 0;
+  }
+
+  for (const transfer of confirmedSettlements) {
+    balanceMap[transfer.from_member] = roundPaise(
+      (balanceMap[transfer.from_member] ?? 0) + Number(transfer.amount)
+    );
+    balanceMap[transfer.to_member] = roundPaise(
+      (balanceMap[transfer.to_member] ?? 0) - Number(transfer.amount)
+    );
   }
 
   // Process each expense

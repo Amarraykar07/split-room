@@ -1,19 +1,28 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { Member } from '@/types';
+import type { SettlementRecord } from '@/types';
 import type { FullExpense } from './RoomClient';
 import { computeBalances, computeSettlements } from '@/lib/settle';
-import { formatINR, buildUPILink } from '@/lib/utils';
-import { CheckCircle2, CircleDollarSign, Send, Users } from 'lucide-react';
+import { formatINR, buildUPILink, buildPaymentReminderMessage, buildWhatsAppUrl } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { CheckCircle2, CircleDollarSign, Send, Users, Bell } from 'lucide-react';
 
 interface Props {
   members: Member[];
   expenses: FullExpense[];
+  settlements: SettlementRecord[];
+  roomId: string;
+  roomCode: string;
+  roomName: string;
+  myMemberId: string | null;
 }
 
-export default function SettlementPanel({ members, expenses }: Props) {
+export default function SettlementPanel({ members, expenses, settlements: records, roomId, roomCode, roomName, myMemberId }: Props) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
   const balances = useMemo(() => {
     const simplified = expenses.map((e) => ({
       paid_by: e.paid_by,
@@ -22,8 +31,8 @@ export default function SettlementPanel({ members, expenses }: Props) {
         share: Number(s.share),
       })),
     }));
-    return computeBalances(members, simplified);
-  }, [members, expenses]);
+    return computeBalances(members, simplified, records.filter((r) => r.status === 'confirmed'));
+  }, [members, expenses, records]);
 
   const settlements = useMemo(() => computeSettlements(balances), [balances]);
 
@@ -127,6 +136,41 @@ export default function SettlementPanel({ members, expenses }: Props) {
                       {formatINR(s.amount)}
                     </span>
                   </div>
+                  {(() => {
+                    const record = records.find((r) => r.from_member === s.from.id && r.to_member === s.to.id && Math.abs(Number(r.amount) - s.amount) < 0.01);
+                    // Identity controls are UI-level only; the MVP has no authentication.
+                    const isPayer = myMemberId === s.from.id;
+                    const isReceiver = myMemberId === s.to.id;
+                    const markPaid = async () => {
+                      setBusyId(s.from.id);
+                      const { error } = await supabase.from('settlements').insert({ room_id: roomId, from_member: s.from.id, to_member: s.to.id, amount: s.amount, status: 'paid' });
+                      if (error) setActionError(error.message);
+                      setBusyId(null);
+                    };
+                    const cancel = async () => {
+                      if (record) {
+                        const { error } = await supabase.from('settlements').delete().eq('id', record.id);
+                        if (error) setActionError(error.message);
+                      }
+                    };
+                    const confirm = async () => {
+                      if (record) {
+                        const { error } = await supabase.from('settlements').update({ status: 'confirmed', confirmed_at: new Date().toISOString() }).eq('id', record.id);
+                        if (error) setActionError(error.message);
+                      }
+                    };
+                    const roomLink = typeof window !== 'undefined' ? `${window.location.origin}/room/${encodeURIComponent(roomCode)}` : `https://splitroom.in/room/${encodeURIComponent(roomCode)}`;
+                    const reminder = buildWhatsAppUrl(buildPaymentReminderMessage({ payerName: s.from.name, receiverName: s.to.name, roomName, amount: s.amount, receiverUpiId: s.to.upi_id, roomLink }));
+                    return <div className="flex flex-wrap items-center gap-2">
+                      {record?.status === 'confirmed' && <span className="rounded-full bg-success/15 px-2 py-1 text-xs font-bold text-success">Settled</span>}
+                      {record?.status === 'paid' && <span className="rounded-full bg-yellow-400/15 px-2 py-1 text-xs font-bold text-yellow-300">Waiting for confirmation</span>}
+                      {!record && isPayer && <button className="btn-primary w-auto px-3 text-xs" onClick={markPaid} disabled={busyId === s.from.id}>Mark as paid</button>}
+                      {record?.status === 'paid' && isReceiver && <button className="btn-primary w-auto px-3 text-xs" onClick={confirm}>Confirm received</button>}
+                      {record?.status === 'paid' && (isPayer || isReceiver) && <button className="btn-secondary w-auto px-3 text-xs" onClick={cancel}>Cancel</button>}
+                      <a className="btn-secondary w-auto px-3 text-xs" href={reminder} target="_blank" rel="noopener noreferrer"><Bell size={14} /> Remind</a>
+                      {record && !isPayer && !isReceiver && <span className="text-xs text-muted-foreground">Payment status is read-only</span>}
+                    </div>;
+                  })()}
 
                   {/* UPI section */}
                   {upiLink ? (
@@ -141,7 +185,6 @@ export default function SettlementPanel({ members, expenses }: Props) {
                             includeMargin={false}
                           />
                         </div>
-
                         {/* UPI button and info */}
                         <div className="flex-1">
                           <p className="mb-2 text-xs text-muted-foreground">
@@ -171,6 +214,18 @@ export default function SettlementPanel({ members, expenses }: Props) {
           </div>
         )}
       </div>
+      <div className="card">
+        <h2 className="mb-3 font-bold">Payment history</h2>
+        {records.length === 0 ? <p className="text-sm text-muted-foreground">No payments marked yet.</p> : (
+          <div className="space-y-2">{records.map((record) => (
+            <div key={record.id} className="flex items-center justify-between gap-2 rounded-xl bg-surface-strong px-3 py-2 text-sm">
+              <span>{members.find((m) => m.id === record.from_member)?.name} → {members.find((m) => m.id === record.to_member)?.name}</span>
+              <span className={record.status === 'confirmed' ? 'text-success' : 'text-yellow-300'}>{formatINR(Number(record.amount))} · {record.status === 'confirmed' ? 'Settled' : 'Waiting'}</span>
+            </div>
+          ))}</div>
+        )}
+      </div>
+      {actionError && <p className="text-sm text-danger">{actionError}</p>}
     </div>
   );
 }

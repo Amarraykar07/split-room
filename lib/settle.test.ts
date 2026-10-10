@@ -134,4 +134,25 @@ describe('computeSettlements', () => {
     const total = settlements.reduce((s, t) => s + t.amount, 0);
     expect(roundPaise(total)).toBeCloseTo(66.67, 1);
   });
+
+  it('applies partial confirmed payments before creating remaining transactions', () => {
+    const balances = computeBalances(
+      [alice, bob],
+      [{ paid_by: 'a', splits: [{ member_id: 'a', share: 0 }, { member_id: 'b', share: 100 }] }],
+      [{ from_member: 'b', to_member: 'a', amount: 40 }]
+    );
+    expect(balances.find((b) => b.member.id === 'a')!.balance).toBe(60);
+    expect(balances.find((b) => b.member.id === 'b')!.balance).toBe(-60);
+    expect(computeSettlements(balances)[0].amount).toBe(60);
+  });
+
+  it('removes a fully confirmed payment from remaining transactions and stays zero-sum', () => {
+    const balances = computeBalances(
+      [alice, bob],
+      [{ paid_by: 'a', splits: [{ member_id: 'a', share: 0 }, { member_id: 'b', share: 100 }] }],
+      [{ from_member: 'b', to_member: 'a', amount: 100 }]
+    );
+    expect(computeSettlements(balances)).toEqual([]);
+    expect(roundPaise(balances.reduce((sum, item) => sum + item.balance, 0))).toBe(0);
+  });
 });

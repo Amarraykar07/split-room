@@ -10,10 +10,13 @@
 
 - 🚀 **No login** — share a link, everyone joins instantly
 - 💸 **Add & split expenses** — equal split with INR amounts
+- ⚖️ **Unequal splits** — exact amounts, percentages, and weighted shares with paise-safe rounding
 - 📊 **Smart settlements** — minimum transactions to settle all debts
+- ✅ **Payment status** — mark payments paid and confirm receipt in realtime
 - 📱 **Pay via UPI** — deep links + QR codes for PhonePe, GPay, Paytm
+- 🖼️ **Trip summary cards** — share or download a dark Pixel Snow trip summary PNG
 - ⚡ **Realtime** — live updates across all devices via Supabase
-- 💬 **WhatsApp share** — one-tap room sharing
+- 💬 **WhatsApp reminders** — friendly payment reminders with UPI details
 
 ---
 
@@ -41,6 +44,8 @@ npm install
 4. Click **Run** ✅
 
 This creates all tables, indexes, RLS policies, and enables Realtime.
+
+For an existing project, run [`supabase/migrations/003_features.sql`](./supabase/migrations/003_features.sql) instead. Confirm that `settlements` is included in **Database → Publications → supabase_realtime** if your project was created before this migration.
 
 ### 4. Get Your API Keys
 
@@ -77,6 +82,18 @@ npm test
 ```
 
 Tests cover the settlement algorithm (`lib/settle.test.ts`) including paise rounding edge cases.
+
+## New feature notes
+
+- Select the split type while adding an expense. Exact values are entered in rupees; percentage and share inputs are raw values. Every stored share is rounded in integer paise and totals exactly match the expense.
+- In **Settle Up**, the payer can mark a suggested transfer as paid and the receiver can confirm it. The MVP identity selector is stored in local storage, so these controls are UI-level guidance rather than authentication.
+- Use **Share summary** in the room header to preview a 1080×1350 card. On supported phones, Share uses the Web Share API; otherwise download the PNG.
+
+## Manual Supabase steps
+
+1. Run `supabase/migrations/003_features.sql` in the Supabase SQL Editor for an existing database (or use the updated `supabase/schema.sql` for a fresh setup).
+2. In **Database → Publications**, verify `settlements` is enabled in `supabase_realtime`; the migration attempts to add it automatically.
+3. Refresh/reopen active room tabs after the migration so the new realtime subscription is established.
 
 ---
 

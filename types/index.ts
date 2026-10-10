@@ -22,6 +22,7 @@ export interface Expense {
   amount: number;
   paid_by: string; // member id
   created_at: string;
+  split_type: SplitType;
   // joined
   paid_by_member?: Member;
   splits?: ExpenseSplit[];
@@ -32,15 +33,34 @@ export interface ExpenseSplit {
   expense_id: string;
   member_id: string;
   share: number;
+  split_value: number | null;
   // joined
   member?: Member;
 }
 
 // UI types
 export interface Settlement {
+  id?: string;
+  room_id?: string;
   from: Member;
   to: Member;
   amount: number;
+  status?: 'paid' | 'confirmed';
+  created_at?: string;
+  confirmed_at?: string | null;
+}
+
+export type SplitType = 'equal' | 'exact' | 'percentage' | 'shares';
+
+export interface SettlementRecord {
+  id: string;
+  room_id: string;
+  from_member: string;
+  to_member: string;
+  amount: number;
+  status: 'paid' | 'confirmed';
+  created_at: string;
+  confirmed_at: string | null;
 }
 
 export interface MemberBalance {

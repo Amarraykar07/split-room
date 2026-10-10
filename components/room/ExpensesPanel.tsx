@@ -6,6 +6,8 @@ import type { FullExpense } from './RoomClient';
 import { supabase } from '@/lib/supabase';
 import { formatINR } from '@/lib/utils';
 import { roundPaise } from '@/lib/settle';
+import { computeSplits } from '@/lib/split';
+import type { SplitType } from '@/types';
 import { Check, FileText, Plus, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -21,6 +23,8 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
   const [amount, setAmount] = useState('');
   const [paidBy, setPaidBy] = useState(myMemberId ?? '');
   const [splitBetween, setSplitBetween] = useState<string[]>(members.map((m) => m.id));
+  const [splitType, setSplitType] = useState<SplitType>('equal');
+  const [splitValues, setSplitValues] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -31,6 +35,8 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
   const openForm = () => {
     setSplitBetween(members.map((m) => m.id));
     setPaidBy(myMemberId ?? members[0]?.id ?? '');
+    setSplitType('equal');
+    setSplitValues({});
     setShowForm(true);
   };
 
@@ -51,35 +57,28 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
       setError('Please select who paid');
       return;
     }
-    if (splitBetween.length === 0) {
-      setError('Select at least one person to split between');
-      return;
-    }
+    if (splitBetween.length === 0) { setError('Select at least one person to split between'); return; }
 
     setAdding(true);
     setError('');
 
     try {
-      const roundedAmount = roundPaise(numAmount);
-      const sharePerPerson = roundPaise(roundedAmount / splitBetween.length);
-
-      // Handle paise rounding: give remainder to first person
-      let remaining = roundedAmount;
-      const shares: { member_id: string; share: number }[] = splitBetween.map((mid, idx) => {
-        if (idx === splitBetween.length - 1) {
-          return { member_id: mid, share: roundPaise(remaining) };
-        }
-        remaining = roundPaise(remaining - sharePerPerson);
-        return { member_id: mid, share: sharePerPerson };
-      });
+      const totalPaise = Math.round(numAmount * 100);
+      const computed = computeSplits(totalPaise, splitType, splitBetween.map((memberId) => ({
+        memberId,
+        value: splitType === 'exact'
+          ? Math.round(parseFloat(splitValues[memberId] || '0') * 100)
+          : splitType === 'equal' ? undefined : parseFloat(splitValues[memberId] || '0'),
+      })));
 
       const { data: expense, error: expErr } = await supabase
         .from('expenses')
         .insert({
           room_id: roomId,
           description: description.trim(),
-          amount: roundedAmount,
+          amount: totalPaise / 100,
           paid_by: effectivePaidBy,
+          split_type: splitType,
         })
         .select()
         .single();
@@ -87,7 +86,12 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
       if (expErr) throw expErr;
 
       const { error: splitErr } = await supabase.from('expense_splits').insert(
-        shares.map((s) => ({ expense_id: expense.id, ...s }))
+        computed.map((s) => ({
+          expense_id: expense.id,
+          member_id: s.memberId,
+          share: s.sharePaise / 100,
+          split_value: s.splitValue,
+        }))
       );
 
       if (splitErr) throw splitErr;
@@ -110,6 +114,20 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
   };
 
   const totalAmount = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const splitError = (() => {
+    if (!amount || splitBetween.length === 0) return null;
+    try {
+      computeSplits(Math.round(parseFloat(amount) * 100), splitType, splitBetween.map((memberId) => ({
+        memberId,
+        value: splitType === 'exact'
+          ? Math.round(parseFloat(splitValues[memberId] || '0') * 100)
+          : splitType === 'equal' ? undefined : parseFloat(splitValues[memberId] || '0'),
+      })));
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Enter valid split values';
+    }
+  })();
 
   return (
     <section>
@@ -214,9 +232,38 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
                   </label>
                 ))}
               </div>
-              {splitBetween.length > 0 && amount && (
+              <div className="mt-3 flex rounded-xl border border-border p-1" role="tablist" aria-label="Split type">
+                {([
+                  ['equal', 'Equal'], ['exact', 'Exact'], ['percentage', '%'], ['shares', 'Shares'],
+                ] as const).map(([value, label]) => (
+                  <button type="button" key={value} onClick={() => setSplitType(value)}
+                    className={`min-h-[44px] flex-1 rounded-lg px-2 text-xs font-bold ${splitType === value ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {splitType !== 'equal' && (
+                <div className="mt-3 space-y-2">
+                  {splitBetween.map((id) => {
+                    const member = members.find((m) => m.id === id);
+                    return <label key={id} className="flex items-center gap-2 text-sm">
+                      <span className="min-w-20 truncate">{member?.name}</span>
+                      <input className="input" type="number" min={splitType === 'shares' ? 1 : 0}
+                        step={splitType === 'shares' ? 1 : '0.01'} value={splitValues[id] ?? ''}
+                        onChange={(e) => setSplitValues((prev) => ({ ...prev, [id]: e.target.value }))}
+                        placeholder={splitType === 'percentage' ? '0%' : splitType === 'shares' ? '1' : '₹0.00'} />
+                    </label>;
+                  })}
+                </div>
+              )}
+              {splitBetween.length > 0 && amount && splitType === 'equal' && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   ≈ {formatINR(roundPaise(parseFloat(amount || '0') / splitBetween.length))} per person
+                </p>
+              )}
+              {splitType !== 'equal' && amount && (
+                <p className={`mt-2 text-xs ${splitError ? 'text-danger' : 'text-success'}`}>
+                  {splitError ?? (splitType === 'percentage' ? 'Percentages add up to 100%' : 'Split is valid')}
                 </p>
               )}
             </div>
@@ -224,7 +271,7 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
             {error && <p className="text-sm text-danger">{error}</p>}
 
             <div className="flex gap-3">
-              <button type="submit" className="btn-primary flex-1" disabled={adding}>
+              <button type="submit" className="btn-primary flex-1" disabled={adding || Boolean(splitError) || !amount || splitBetween.length === 0}>
                 {adding ? 'Adding...' : 'Add Expense'}
               </button>
               <button
@@ -261,6 +308,9 @@ export default function ExpensesPanel({ expenses, members, roomId, myMemberId }:
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   Paid by <span className="font-medium text-foreground">{exp.paid_by_member?.name}</span>
                 </p>
+                <span className="mt-2 inline-flex rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-[11px] font-bold uppercase text-accent">
+                  {exp.split_type === 'percentage' ? '%' : exp.split_type}
+                </span>
                 <div className="flex flex-wrap gap-1 mt-2">
                   {exp.splits?.map((s) => (
                     <span

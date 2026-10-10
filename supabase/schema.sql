@@ -44,6 +44,7 @@ create table if not exists expenses (
   description text not null,
   amount      numeric(12, 2) not null check (amount > 0),
   paid_by     uuid not null references members (id) on delete restrict,
+  split_type  text not null default 'equal',
   created_at  timestamptz not null default now()
 );
 
@@ -57,6 +58,7 @@ create table if not exists expense_splits (
   expense_id uuid not null references expenses (id) on delete cascade,
   member_id  uuid not null references members (id) on delete cascade,
   share      numeric(12, 2) not null check (share >= 0),
+  split_value numeric,
   created_at timestamptz not null default now(),
   unique (expense_id, member_id)
 );
@@ -74,6 +76,24 @@ alter table rooms          enable row level security;
 alter table members        enable row level security;
 alter table expenses       enable row level security;
 alter table expense_splits enable row level security;
+
+create table if not exists settlements (
+  id uuid primary key default uuid_generate_v4(),
+  room_id uuid not null references rooms (id) on delete cascade,
+  from_member uuid not null references members (id) on delete cascade,
+  to_member uuid not null references members (id) on delete cascade,
+  amount numeric(12, 2) not null check (amount > 0),
+  status text not null default 'paid' check (status in ('paid', 'confirmed')),
+  created_at timestamptz not null default now(),
+  confirmed_at timestamptz
+);
+
+create index if not exists idx_settlements_room_id on settlements (room_id);
+alter table settlements enable row level security;
+create policy "anon_select_settlements" on settlements for select using (true);
+create policy "anon_insert_settlements" on settlements for insert with check (true);
+create policy "anon_update_settlements" on settlements for update using (true);
+create policy "anon_delete_settlements" on settlements for delete using (true);
 
 -- Rooms: public anon access (room code guards access in app logic)
 create policy "anon_select_rooms"  on rooms          for select using (true);
@@ -108,3 +128,4 @@ create policy "anon_delete_splits"  on expense_splits for delete using (true);
 alter publication supabase_realtime add table members;
 alter publication supabase_realtime add table expenses;
 alter publication supabase_realtime add table expense_splits;
+alter publication supabase_realtime add table settlements;

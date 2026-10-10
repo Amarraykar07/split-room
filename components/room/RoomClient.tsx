@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Room, Member, Expense, ExpenseSplit } from '@/types';
+import type { Room, Member, Expense, ExpenseSplit, SettlementRecord } from '@/types';
 import { supabase } from '@/lib/supabase';
 import { getLocalStorage, setLocalStorage } from '@/lib/utils';
 import MembersPanel from './MembersPanel';
@@ -11,6 +11,7 @@ import ShareButton from '../ShareButton';
 import AdSlot from '../AdSlot';
 import { Receipt } from 'lucide-react';
 import RoomCode from '../RoomCode';
+import SummaryCard from './SummaryCard';
 
 interface Props {
   room: Room;
@@ -27,12 +28,15 @@ export default function RoomClient({ room }: Props) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'expenses' | 'settle'>('expenses');
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
+  const [settlements, setSettlements] = useState<SettlementRecord[]>([]);
+  const [settlementsAvailable, setSettlementsAvailable] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const lsKey = `splitroom_member_${room.id}`;
 
   // Load initial data
   const loadData = useCallback(async () => {
-    const [{ data: membersData }, { data: expensesData }] = await Promise.all([
+    const [{ data: membersData, error: membersError }, { data: expensesData, error: expensesError }, settlementResult] = await Promise.all([
       supabase.from('members').select('*').eq('room_id', room.id).order('created_at'),
       supabase
         .from('expenses')
@@ -46,9 +50,21 @@ export default function RoomClient({ room }: Props) {
         `)
         .eq('room_id', room.id)
         .order('created_at', { ascending: false }),
+      settlementsAvailable
+        ? supabase.from('settlements').select('*').eq('room_id', room.id).order('created_at', { ascending: false })
+        : Promise.resolve({ data: null, error: null }),
     ]);
+    const settlementError = settlementResult.error;
+    const missingSettlementsTable =
+      settlementError?.code === '42P01' ||
+      settlementError?.code === 'PGRST205' ||
+      settlementError?.message.toLowerCase().includes('settlements');
+    if (missingSettlementsTable) setSettlementsAvailable(false);
+    const firstError = membersError ?? expensesError ?? (missingSettlementsTable ? null : settlementError);
+    if (firstError) setLoadError(firstError.message);
     if (membersData) setMembers(membersData);
     if (expensesData) setExpenses(expensesData as FullExpense[]);
+    if (settlementResult.data) setSettlements(settlementResult.data as SettlementRecord[]);
     setLoading(false);
   }, [room.id]);
 
@@ -63,6 +79,7 @@ export default function RoomClient({ room }: Props) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `room_id=eq.${room.id}` }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${room.id}` }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'settlements', filter: `room_id=eq.${room.id}` }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -88,6 +105,7 @@ export default function RoomClient({ room }: Props) {
             <RoomCode code={room.code} className="font-mono text-xs text-accent" />
           </div>
           <div className="flex items-center gap-2">
+            <SummaryCard roomName={room.name} members={members} expenses={expenses} />
             <ShareButton roomCode={room.code} roomName={room.name} />
           </div>
         </div>
@@ -116,6 +134,8 @@ export default function RoomClient({ room }: Props) {
             <Receipt className="mx-auto animate-pulse text-accent" size={32} />
             <p className="mt-3 text-muted-foreground">Loading room...</p>
           </div>
+        ) : loadError ? (
+          <div className="card text-center py-10"><p className="font-semibold text-danger">Could not load this room.</p><p className="mt-2 text-sm text-muted-foreground">{loadError}</p><button className="btn-secondary mx-auto mt-4 w-auto" onClick={() => { setLoading(true); setLoadError(''); loadData(); }}>Try again</button></div>
         ) : (
           <>
             <MembersPanel
@@ -137,7 +157,7 @@ export default function RoomClient({ room }: Props) {
             )}
 
             {activeTab === 'settle' && (
-              <SettlementPanel members={members} expenses={expenses} />
+              <SettlementPanel members={members} expenses={expenses} settlements={settlements} roomId={room.id} roomCode={room.code} roomName={room.name} myMemberId={myMemberId} />
             )}
           </>
         )}

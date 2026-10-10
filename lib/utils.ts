@@ -48,6 +48,20 @@ export function buildWhatsAppUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
+export function buildPaymentReminderMessage(params: {
+  payerName: string;
+  receiverName: string;
+  roomName: string;
+  amount: number;
+  receiverUpiId?: string | null;
+  roomLink: string;
+}): string {
+  const upi = params.receiverUpiId
+    ? ` ${params.receiverName} ko UPI karo: ${params.receiverUpiId} .`
+    : '';
+  return `Hey ${params.payerName}! ${params.roomName} ke ${formatINR(params.amount)} baaki hai 🙏${upi} Hisaab yahan dekho: ${params.roomLink}`;
+}
+
 /**
  * Get localStorage item safely (SSR-safe).
  */
