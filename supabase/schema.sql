@@ -17,10 +17,35 @@ create table if not exists rooms (
   id         uuid primary key default uuid_generate_v4(),
   code       text unique not null,
   name       text not null default 'My Room',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  expiry_days integer not null default 2 check (expiry_days between 1 and 365),
+  last_active_at timestamptz not null default now(),
+  expires_at timestamptz generated always as
+    (last_active_at + expiry_days * interval '1 day') stored
 );
 
 create index if not exists idx_rooms_code on rooms (code);
+
+create or replace function touch_room_activity()
+returns trigger
+language plpgsql
+security invoker
+as $$
+begin
+  if tg_table_name = 'expense_splits' then
+    update rooms
+    set last_active_at = now()
+    where id = (
+      select room_id
+      from expenses
+      where id = coalesce(new.expense_id, old.expense_id)
+    );
+  else
+    update rooms set last_active_at = now() where id = coalesce(new.room_id, old.room_id);
+  end if;
+  return coalesce(new, old);
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- MEMBERS
@@ -78,6 +103,21 @@ alter table members        enable row level security;
 alter table expenses       enable row level security;
 alter table expense_splits enable row level security;
 
+create or replace function delete_expired_rooms()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  deleted_count integer;
+begin
+  delete from rooms where expires_at < now();
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
+end;
+$$;
+
 create table if not exists settlements (
   id uuid primary key default uuid_generate_v4(),
   room_id uuid not null references rooms (id) on delete cascade,
@@ -130,3 +170,17 @@ alter publication supabase_realtime add table members;
 alter publication supabase_realtime add table expenses;
 alter publication supabase_realtime add table expense_splits;
 alter publication supabase_realtime add table settlements;
+
+-- Activity triggers and hourly cleanup are also included in migrations/005_expiry.sql.
+drop trigger if exists members_touch_room_activity on members;
+create trigger members_touch_room_activity after insert or update or delete on members
+for each row execute function touch_room_activity();
+drop trigger if exists expenses_touch_room_activity on expenses;
+create trigger expenses_touch_room_activity after insert or update or delete on expenses
+for each row execute function touch_room_activity();
+drop trigger if exists expense_splits_touch_room_activity on expense_splits;
+create trigger expense_splits_touch_room_activity after insert or update or delete on expense_splits
+for each row execute function touch_room_activity();
+drop trigger if exists settlements_touch_room_activity on settlements;
+create trigger settlements_touch_room_activity after insert or update or delete on settlements
+for each row execute function touch_room_activity();

@@ -5,6 +5,9 @@ export interface Room {
   code: string;
   name: string;
   created_at: string;
+  expiry_days: number;
+  last_active_at: string;
+  expires_at?: string;
 }
 
 export interface Member {

@@ -5,7 +5,8 @@ export default function PrivacyPage() {
         <p className="text-sm font-semibold uppercase tracking-widest text-accent">Draft for owner review</p>
         <h1 className="text-3xl font-bold">Privacy Policy</h1>
         <p>Split Room does not require accounts. A room may store its name, member names, optional UPI IDs, and expenses entered by participants.</p>
-        <p>Data may be deleted after a period of inactivity. Do not enter sensitive information into a room.</p>
+        <p>Free rooms are deleted after 2 days of inactivity, including the room name, members, UPI IDs, expenses, and settlements. Download a backup before the deadline if you need to keep the data.</p>
+        <p>Do not enter sensitive information into a room.</p>
         <p>Google AdSense, when enabled, may use cookies or similar technologies. Contact us at the email listed on the Contact page with privacy questions.</p>
       </article>
     </main>

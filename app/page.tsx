@@ -44,6 +44,7 @@ const faqs = [
   ['How does the trip expense calculator work?', 'Add expenses with who paid. Our smart algorithm calculates the minimum payments needed to settle everyone.'],
   ['Can I split bills with friends who are not tech-savvy?', 'Absolutely! Share the room link and anyone can join from any phone browser.'],
   ['How do I pay via UPI?', 'If your friend adds a UPI ID, you will see a Pay button and QR code to open any UPI app.'],
+  ['How long are rooms kept?', 'Free rooms are deleted after 2 days of inactivity. Adding an expense, member, split, or settlement keeps the room active.'],
   ['Is my data safe?', 'Rooms use unguessable 8-character codes and no personal data is collected.'],
 ];
 

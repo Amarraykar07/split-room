@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { generateRoomCode } from '@/lib/utils';
+import { FREE_EXPIRY_DAYS } from '@/lib/plans';
 
 export default function CreateRoomForm() {
   const router = useRouter();
@@ -25,9 +26,15 @@ export default function CreateRoomForm() {
       const { error: dbError } = await supabase.from('rooms').insert({
         code,
         name: roomName.trim(),
+        expiry_days: FREE_EXPIRY_DAYS,
       });
 
       if (dbError) throw dbError;
+      try {
+        window.localStorage.setItem('splitroom_created_notice', '1');
+      } catch {
+        // The notice is best-effort when storage is unavailable.
+      }
       router.push(`/room/${code}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create room';

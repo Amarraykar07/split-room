@@ -17,6 +17,7 @@
 - 🖼️ **Trip summary cards** — share or download a dark Pixel Snow trip summary PNG
 - ⚡ **Realtime** — live updates across all devices via Supabase
 - 💬 **WhatsApp reminders** — friendly payment reminders with UPI details
+- ⏳ **Room expiry** — free rooms are deleted after 2 days of inactivity, with a backup download and expiry extension
 
 ---
 
@@ -45,7 +46,7 @@ npm install
 
 This creates all tables, indexes, RLS policies, and enables Realtime.
 
-For an existing project, run [`supabase/migrations/003_features.sql`](./supabase/migrations/003_features.sql) instead. Confirm that `settlements` is included in **Database → Publications → supabase_realtime** if your project was created before this migration.
+For an existing project, run [`supabase/migrations/003_features.sql`](./supabase/migrations/003_features.sql), [`supabase/migrations/004_categories.sql`](./supabase/migrations/004_categories.sql), and [`supabase/migrations/005_expiry.sql`](./supabase/migrations/005_expiry.sql) in order. Confirm that `settlements` is included in **Database → Publications → supabase_realtime** if your project was created before these migrations.
 
 ### 4. Get Your API Keys
 
@@ -94,6 +95,7 @@ Tests cover the settlement algorithm (`lib/settle.test.ts`) including paise roun
 1. Run `supabase/migrations/003_features.sql` in the Supabase SQL Editor for an existing database (or use the updated `supabase/schema.sql` for a fresh setup).
 2. In **Database → Publications**, verify `settlements` is enabled in `supabase_realtime`; the migration attempts to add it automatically.
 3. Refresh/reopen active room tabs after the migration so the new realtime subscription is established.
+4. Enable the `pg_cron` extension in Supabase if you want automatic hourly cleanup. Otherwise run `select delete_expired_rooms();` manually.
 
 ---
 
