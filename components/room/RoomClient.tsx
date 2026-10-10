@@ -105,7 +105,7 @@ export default function RoomClient({ room }: Props) {
             <RoomCode code={room.code} className="font-mono text-xs text-accent" />
           </div>
           <div className="flex items-center gap-2">
-            <SummaryCard roomName={room.name} members={members} expenses={expenses} />
+            <SummaryCard roomName={room.name} members={members} expenses={expenses} settlements={settlements} />
             <ShareButton roomCode={room.code} roomName={room.name} />
           </div>
         </div>
